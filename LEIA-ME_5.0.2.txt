@@ -1,0 +1,9 @@
+VITRINE DIGITAL 5.0.2 — VIDEO PREVIEW & DIAGNOSTICS
+
+Correções:
+- miniaturas de vídeo tentam capturar um quadro real em vez de permanecer pretas;
+- toque na miniatura OU no nome do item da playlist para abrir o vídeo individualmente;
+- pré-visualização mostra carregamento, resolução/duração e erro de reprodução;
+- mantém o samsung.html da 5.0.1 sem substituir o player/index.html existente.
+
+Publicação: substitua admin/index.html, css/admin.css e js/app.js. Se já publicou player/samsung.html, não precisa reenviá-lo.

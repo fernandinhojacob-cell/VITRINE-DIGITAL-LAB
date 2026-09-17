@@ -1,0 +1,20 @@
+VITRINE DIGITAL PRO 5.2 — EDGE OFFLINE-FIRST (TESTE SEGURO)
+
+Esta versão NÃO substitui o Player Samsung atual.
+Ela adiciona um novo Player experimental em player/edge.html.
+
+Teste sugerido:
+/player/edge.html?code=TV-0001
+
+Recursos:
+- snapshot local da programação
+- pré-cache de imagens e vídeos da playlist
+- reprodução do cache quando possível
+- watchdog: vídeo com erro/travamento é pulado
+- heartbeat v5.2 a cada 60 s
+- proof-of-play por item
+- ressincronização automática ao voltar a internet
+
+IMPORTANTE:
+Mantenha player/samsung.html atual como fallback durante os testes.
+A capacidade de cache de vídeos depende do espaço disponível no navegador da TV.

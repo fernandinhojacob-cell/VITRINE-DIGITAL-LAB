@@ -1,0 +1,12 @@
+VITRINE DIGITAL 5.1 — NETWORK HEALTH
+
+Evolução sobre a 5.0.3.
+- Corrige falso OFFLINE da Samsung The Frame: heartbeat real ~60s e janela antiga era 45s.
+- Online: até 90s desde o último heartbeat.
+- Comunicação atrasada: 91–180s.
+- Offline: acima de 180s.
+- Dashboard usa heartbeat real, não apenas o campo status salvo.
+- Monitor ganhou filtro Atrasadas e alerta operacional.
+- Mantém upload TUS da 5.0.3, preview/diagnóstico de vídeo e Player Samsung.
+
+Publicação: substitua admin/index.html, css/admin.css e js/app.js. O player/samsung.html não precisa ser alterado.

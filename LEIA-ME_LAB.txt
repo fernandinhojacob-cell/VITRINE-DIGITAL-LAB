@@ -1,0 +1,11 @@
+VITRINE DIGITAL LAB — BASE 5.2
+Ambiente separado para desenvolvimento e testes.
+
+IMPORTANTE:
+- Este pacote deve ser publicado somente no repositório VITRINE-DIGITAL-LAB.
+- Não substitui o VITRINE-DIGITAL de produção.
+- player/edge.html é o Player experimental Offline-First.
+- player/samsung.html permanece como referência Samsung.
+- Antes de usar dados reais, configurar um Supabase LAB separado.
+
+Fluxo recomendado: LAB -> testar -> validar -> promover para PRODUÇÃO.
