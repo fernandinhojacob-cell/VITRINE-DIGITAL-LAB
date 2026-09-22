@@ -2,5 +2,5 @@
 // Chave publishable: apropriada para cliente/browser; nunca use service_role aqui.
 window.SUPABASE_CONFIG = {
   url: "https://vrsodvrizkubbjqiymwj.supabase.co",
-  key: sb_publishable_puitUTzQL-LMbyDJGAlTrQ_Lofvo4Kz
+  key: "sb_publishable_puitUTzQL-LMbyDJGAlTrQ_Lofvo4Kz"
 };
