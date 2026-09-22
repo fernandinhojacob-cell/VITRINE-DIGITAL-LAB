@@ -108,7 +108,7 @@ body.monitor-focus .monitor-grid{grid-template-columns:repeat(auto-fill,minmax(2
 
 /* 4.26 — Operação Mobile Completa */
 .playlist-item-actions{display:flex;align-items:center;gap:5px;margin-left:auto}
-.mobile-order-btn{display:none}
+.mobile-order-btn{display:inline-flex;align-items:center;justify-content:center;min-width:38px;min-height:34px;padding:5px 10px;font-size:18px}
 @media(max-width:700px){
   .mobile-order-btn{display:inline-flex;align-items:center;justify-content:center;min-width:38px!important;min-height:38px!important;padding:6px 10px!important;font-size:18px!important}
   .drag-item{gap:8px;align-items:center;min-height:56px;padding:9px 10px}
