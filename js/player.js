@@ -1,5 +1,5 @@
 (function(){'use strict';
-const PLAYER_VERSION='4.35.0-TIZEN-LOCAL-STABLE';
+const PLAYER_VERSION='4.36.0-TIZEN-IDB-BUFFER';
 const cfg=window.SUPABASE_CONFIG||{}, hasConfig=!!(cfg.url&&cfg.key&&!String(cfg.url).includes('SEU-PROJETO'));
 const root=document.getElementById('playerRoot'),stage=document.getElementById('stage'),status=document.getElementById('status'),empty=document.getElementById('empty'),emptyMessage=document.getElementById('emptyMessage'),startBtn=document.getElementById('startBtn'),fullscreenBtn=document.getElementById('fullscreenBtn');
 const p=new URLSearchParams(location.search), code=(p.get('code')||localStorage.getItem('vitrine_screen_code')||'TV-0001').trim(); localStorage.setItem('vitrine_screen_code',code);
@@ -14,50 +14,40 @@ function clearStage(){if(timer)clearTimeout(timer);timer=null;stage.innerHTML=''
 async function fs(){try{if(document.fullscreenElement)return;if(root.requestFullscreen)await root.requestFullscreen();else if(root.webkitRequestFullscreen)root.webkitRequestFullscreen()}catch(e){}}
 async function start(){started=true;startBtn.textContent='Reproduzindo';startBtn.disabled=true;await fs();playNext()} startBtn.onclick=start;fullscreenBtn.onclick=fs;document.onkeydown=e=>{if(e.key==='Enter'&&!started)start()};
 function normalize(rows){return(rows||[]).map(r=>{const m=r.media||r;return{id:m.id,type:m.type||'text',url:m.file_url||'',text:m.text_content||m.name||'',duration:Number(r.duration||m.duration||8),transition:r.transition||'fade'}}).filter(x=>(x.type==='text')||x.url)}
-const MEDIA_CACHE='vitrine-media-stable-v435';
+const MEDIA_DB='vitrine_media_v436',MEDIA_STORE='media';
 const mediaObjectUrls=new Map(),mediaDownloadLocks=new Map();
 function mediaKey(x){return 'media:'+(x.id||'sem-id')+'|'+(x.url||'')}
-async function cacheResponse(url){
- try{
-  // Procura em QUALQUER cache existente, inclusive os caches das versões anteriores.
-  const old=await caches.match(url);
-  if(old&&old.ok)return old;
- }catch(e){console.warn('CACHE read',e)}
- return null;
-}
+function openMediaDb(){return new Promise((resolve,reject)=>{const q=indexedDB.open(MEDIA_DB,1);q.onupgradeneeded=()=>{const d=q.result;if(!d.objectStoreNames.contains(MEDIA_STORE))d.createObjectStore(MEDIA_STORE)};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
+async function idbRead(k){const d=await openMediaDb();try{return await new Promise((resolve,reject)=>{const q=d.transaction(MEDIA_STORE,'readonly').objectStore(MEDIA_STORE).get(k);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error)})}finally{d.close()}}
+async function idbWrite(k,v){const d=await openMediaDb();try{await new Promise((resolve,reject)=>{const tx=d.transaction(MEDIA_STORE,'readwrite');tx.objectStore(MEDIA_STORE).put(v,k);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('IDB abort'))})}finally{d.close()}}
 async function persistentMediaUrl(x,allowDownload=true){
  const url=x?.url||''; if(!url)return '';
  const key=mediaKey(x);
  if(mediaObjectUrls.has(key))return mediaObjectUrls.get(key);
-
- let res=await cacheResponse(url);
- if(!res){
-  if(!allowDownload||navigator.onLine===false)return '';
-  if(mediaDownloadLocks.has(key))return mediaDownloadLocks.get(key);
-  const job=(async()=>{
-   setStatus('Baixando conteúdo novo uma vez • '+platform+' • v'+PLAYER_VERSION,true);
-   const net=await fetch(url,{mode:'cors',cache:'no-store'});
-   if(!net.ok)throw new Error('HTTP '+net.status);
-   try{
-    const c=await caches.open(MEDIA_CACHE);
-    await c.put(url,net.clone());
-    res=await c.match(url);
-   }catch(e){throw new Error('A TV não conseguiu gravar o vídeo localmente')}
-   if(!res||!res.ok)throw new Error('Falha ao confirmar vídeo local');
-   const blob=await res.blob();
-   if(!blob||!blob.size)throw new Error('Vídeo local vazio');
-   const local=URL.createObjectURL(blob);
-   mediaObjectUrls.set(key,local);
-   return local;
-  })().finally(()=>mediaDownloadLocks.delete(key));
-  mediaDownloadLocks.set(key,job);
-  return job;
- }
- const blob=await res.blob();
- if(!blob||!blob.size)return '';
- const local=URL.createObjectURL(blob);
- mediaObjectUrls.set(key,local);
- return local;
+ try{
+  const saved=await idbRead(key);
+  if(saved&&saved.buffer){
+   const blob=new Blob([saved.buffer],{type:saved.type||'application/octet-stream'});
+   const local=URL.createObjectURL(blob);mediaObjectUrls.set(key,local);return local;
+  }
+ }catch(e){console.warn('IDB READ',e)}
+ if(!allowDownload||navigator.onLine===false)return '';
+ if(mediaDownloadLocks.has(key))return mediaDownloadLocks.get(key);
+ const job=(async()=>{
+  setStatus('Preparando mídia local • '+platform+' • v'+PLAYER_VERSION,true);
+  const net=await fetch(url,{mode:'cors',cache:'no-store'});
+  if(!net.ok)throw new Error('Download HTTP '+net.status);
+  const type=net.headers.get('content-type')||((x.type==='video')?'video/mp4':'application/octet-stream');
+  const buffer=await net.arrayBuffer();
+  if(!buffer||!buffer.byteLength)throw new Error('Arquivo recebido vazio');
+  await idbWrite(key,{buffer:buffer,type:type,size:buffer.byteLength,savedAt:Date.now()});
+  const verify=await idbRead(key);
+  if(!verify||!verify.buffer||verify.buffer.byteLength!==buffer.byteLength)throw new Error('A TV não confirmou o arquivo local');
+  const blob=new Blob([verify.buffer],{type:verify.type||type});
+  const local=URL.createObjectURL(blob);mediaObjectUrls.set(key,local);return local;
+ })().finally(()=>mediaDownloadLocks.delete(key));
+ mediaDownloadLocks.set(key,job);
+ return job;
 }
 async function prepareItems(rows,allowDownload=true){
  const normalized=normalize(rows),prepared=[];
