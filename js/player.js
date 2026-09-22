@@ -1,5 +1,5 @@
 (function(){'use strict';
-const PLAYER_VERSION='4.36.0-TIZEN-IDB-BUFFER';
+const PLAYER_VERSION='4.37.0-TIZEN-RECOVERY';
 const cfg=window.SUPABASE_CONFIG||{}, hasConfig=!!(cfg.url&&cfg.key&&!String(cfg.url).includes('SEU-PROJETO'));
 const root=document.getElementById('playerRoot'),stage=document.getElementById('stage'),status=document.getElementById('status'),empty=document.getElementById('empty'),emptyMessage=document.getElementById('emptyMessage'),startBtn=document.getElementById('startBtn'),fullscreenBtn=document.getElementById('fullscreenBtn');
 const p=new URLSearchParams(location.search), code=(p.get('code')||localStorage.getItem('vitrine_screen_code')||'TV-0001').trim(); localStorage.setItem('vitrine_screen_code',code);
@@ -14,53 +14,10 @@ function clearStage(){if(timer)clearTimeout(timer);timer=null;stage.innerHTML=''
 async function fs(){try{if(document.fullscreenElement)return;if(root.requestFullscreen)await root.requestFullscreen();else if(root.webkitRequestFullscreen)root.webkitRequestFullscreen()}catch(e){}}
 async function start(){started=true;startBtn.textContent='Reproduzindo';startBtn.disabled=true;await fs();playNext()} startBtn.onclick=start;fullscreenBtn.onclick=fs;document.onkeydown=e=>{if(e.key==='Enter'&&!started)start()};
 function normalize(rows){return(rows||[]).map(r=>{const m=r.media||r;return{id:m.id,type:m.type||'text',url:m.file_url||'',text:m.text_content||m.name||'',duration:Number(r.duration||m.duration||8),transition:r.transition||'fade'}}).filter(x=>(x.type==='text')||x.url)}
-const MEDIA_DB='vitrine_media_v436',MEDIA_STORE='media';
-const mediaObjectUrls=new Map(),mediaDownloadLocks=new Map();
-function mediaKey(x){return 'media:'+(x.id||'sem-id')+'|'+(x.url||'')}
-function openMediaDb(){return new Promise((resolve,reject)=>{const q=indexedDB.open(MEDIA_DB,1);q.onupgradeneeded=()=>{const d=q.result;if(!d.objectStoreNames.contains(MEDIA_STORE))d.createObjectStore(MEDIA_STORE)};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
-async function idbRead(k){const d=await openMediaDb();try{return await new Promise((resolve,reject)=>{const q=d.transaction(MEDIA_STORE,'readonly').objectStore(MEDIA_STORE).get(k);q.onsuccess=()=>resolve(q.result||null);q.onerror=()=>reject(q.error)})}finally{d.close()}}
-async function idbWrite(k,v){const d=await openMediaDb();try{await new Promise((resolve,reject)=>{const tx=d.transaction(MEDIA_STORE,'readwrite');tx.objectStore(MEDIA_STORE).put(v,k);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('IDB abort'))})}finally{d.close()}}
-async function persistentMediaUrl(x,allowDownload=true){
- const url=x?.url||''; if(!url)return '';
- const key=mediaKey(x);
- if(mediaObjectUrls.has(key))return mediaObjectUrls.get(key);
- try{
-  const saved=await idbRead(key);
-  if(saved&&saved.buffer){
-   const blob=new Blob([saved.buffer],{type:saved.type||'application/octet-stream'});
-   const local=URL.createObjectURL(blob);mediaObjectUrls.set(key,local);return local;
-  }
- }catch(e){console.warn('IDB READ',e)}
- if(!allowDownload||navigator.onLine===false)return '';
- if(mediaDownloadLocks.has(key))return mediaDownloadLocks.get(key);
- const job=(async()=>{
-  setStatus('Preparando mídia local • '+platform+' • v'+PLAYER_VERSION,true);
-  const net=await fetch(url,{mode:'cors',cache:'no-store'});
-  if(!net.ok)throw new Error('Download HTTP '+net.status);
-  const type=net.headers.get('content-type')||((x.type==='video')?'video/mp4':'application/octet-stream');
-  const buffer=await net.arrayBuffer();
-  if(!buffer||!buffer.byteLength)throw new Error('Arquivo recebido vazio');
-  await idbWrite(key,{buffer:buffer,type:type,size:buffer.byteLength,savedAt:Date.now()});
-  const verify=await idbRead(key);
-  if(!verify||!verify.buffer||verify.buffer.byteLength!==buffer.byteLength)throw new Error('A TV não confirmou o arquivo local');
-  const blob=new Blob([verify.buffer],{type:verify.type||type});
-  const local=URL.createObjectURL(blob);mediaObjectUrls.set(key,local);return local;
- })().finally(()=>mediaDownloadLocks.delete(key));
- mediaDownloadLocks.set(key,job);
- return job;
-}
-async function prepareItems(rows,allowDownload=true){
- const normalized=normalize(rows),prepared=[];
- for(const x of normalized){
-  if(String(x.url||'').startsWith('idb://'))x.playUrl=await localMediaUrl(x.url);
-  else if((x.type==='video'||x.type==='image')&&/^https?:/i.test(x.url||''))x.playUrl=await persistentMediaUrl(x,allowDownload);
-  else x.playUrl=x.url;
-  if(x.type==='text'||x.type==='web'||x.playUrl)prepared.push(x); else throw new Error('Mídia não disponível localmente: '+(x.text||x.id||'arquivo'));
- }
- return prepared;
-}
-async function finishProof(){if(!db||!currentProof)return;try{await db.from('proof_of_play').update({ended_at:new Date().toISOString(),duration_seconds:Math.max(0,Math.round((Date.now()-currentProof.started)/1000))}).eq('id',currentProof.id)}catch(e){}currentProof=null}
-async function beginProof(x){await finishProof();if(!db||!screen||!x?.id)return;try{const {data}=await db.from('proof_of_play').insert({screen_id:screen.id,media_id:x.id,playlist_id:activePlaylistId,started_at:new Date().toISOString(),status:'played'}).select('id').maybeSingle();if(data?.id)currentProof={id:data.id,started:Date.now()}}catch(e){}}
+async function cachedUrl(url){return url}
+async function prepareItems(rows){const normalized=normalize(rows);for(const x of normalized){if(String(x.url||'').startsWith('idb://'))x.playUrl=await localMediaUrl(x.url);else x.playUrl=x.url&&/^https?:/i.test(x.url)?await cachedUrl(x.url):x.url}return normalized.filter(x=>x.type==='text'||x.playUrl||x.url)}
+async function finishProof(){currentProof=null}
+async function beginProof(x){currentProof=null}
 function syncPosition(){if(!activeSyncGroup||!items.length)return null;const durations=items.map(x=>Math.max(2,Number(x.duration||8))),total=durations.reduce((a,b)=>a+b,0);if(!total)return null;let pos=(Date.now()/1000)%total;for(let i=0;i<durations.length;i++){if(pos<durations[i])return {index:i,offset:pos,remaining:Math.max(.25,durations[i]-pos)};pos-=durations[i]}return {index:0,offset:0,remaining:durations[0]}}
 function playNext(){if(blackout){clearStage();hideEmpty();return}lastPlaybackActivity=Date.now();clearStage();if(!items.length){showEmpty('Nenhum conteúdo disponível para esta tela.');timer=setTimeout(playNext,5000);return}hideEmpty();const sp=syncPosition();if(sp)index=sp.index;const x=items[index%items.length];index=(index+1)%items.length;beginProof(x);const next=async()=>{await finishProof();playNext()};const syncedMs=sp?Math.max(250,sp.remaining*1000):null;
  if(x.type==='video'){const v=document.createElement('video');v.src=x.playUrl||x.url;v.autoplay=true;v.muted=true;v.playsInline=true;v.setAttribute('playsinline','');stage.appendChild(v);let done=false;const once=()=>{if(done)return;done=true;next()};v.onended=once;v.onerror=()=>setTimeout(once,1000);v.play().catch(()=>{startBtn.disabled=false;startBtn.textContent='Toque/OK para iniciar'});if(sp&&sp.offset>0)v.addEventListener('loadedmetadata',()=>{try{if(Number.isFinite(v.duration)&&v.duration>sp.offset)v.currentTime=sp.offset}catch(e){}},{once:true});timer=setTimeout(once,syncedMs||Math.max(5,x.duration||30)*1000)}
@@ -71,12 +28,8 @@ function dayToken(d){return ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay
 function timeHHMM(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
 function scheduleMatches(s,now){const iso=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'),t=timeHHMM(now);if(s.active===false)return false;if(s.start_date&&iso<s.start_date)return false;if(s.end_date&&iso>s.end_date)return false;const st=String(s.start_time||'').slice(0,5),et=String(s.end_time||'').slice(0,5);if(st&&et&&st<=et){if(t<st||t>et)return false}else if(st&&et&&st>et){if(t>et&&t<st)return false}else{if(st&&t<st)return false;if(et&&t>et)return false}const days=String(s.days||'').split(',').map(x=>x.trim()).filter(Boolean);return !days.length||days.includes(dayToken(now))}
 async function resolvePlaylist(){if(!db||!screen)return {pid:screen?.playlist_id||null,blackout:false,syncGroup:null};try{let group=null;if(screen.group_id){const {data:g}=await db.from('groups').select('*').eq('id',screen.group_id).maybeSingle();group=g||null}const {data,error}=await db.from('schedules').select('*').eq('active',true);if(error)throw error;const relevant=(data||[]).filter(s=>s.screen_id===screen.id||(screen.group_id&&s.group_id===screen.group_id));if(!relevant.length){const pid=group?.playlist_id||screen.playlist_id||null;return {pid,blackout:false,syncGroup:group?.playlist_id?group:null}}const now=new Date();const matches=relevant.filter(s=>scheduleMatches(s,now));matches.sort((a,b)=>Number(b.screen_id===screen.id)-Number(a.screen_id===screen.id)||new Date(b.created_at)-new Date(a.created_at));if(!matches.length)return {pid:null,blackout:true,syncGroup:null};const chosen=matches[0],pid=chosen.playlist_id||group?.playlist_id||screen.playlist_id||null;return {pid,blackout:false,syncGroup:chosen.group_id?group:null}}catch(e){return {pid:screen.playlist_id||null,blackout:false,syncGroup:null}}}
-let lastHeartbeatAt=0;
-async function heartbeat(force=false){
+async function heartbeat(){
  if(!db||!screen)return false;
- const nowMs=Date.now();
- if(!force && nowMs-lastHeartbeatAt<300000)return true;
- lastHeartbeatAt=nowMs;
  const now=new Date().toISOString();
  let screenOk=false, logOk=false;
  try{
@@ -126,21 +79,12 @@ async function loadPlaylist(){
  const rows=(pi||[]).map(r=>({...r,media:byId.get(r.media_id)})).filter(r=>r.media&&r.media.active!==false);
  const sig=pid+'|'+(activeSyncGroup?.id||'solo')+'|'+JSON.stringify(rows.map(r=>[r.id,r.sort_order,r.duration,r.media.id,r.media.file_url]));
  if(sig===playlistSignature)return true;
- const previousItems=items,previousPlaylistId=activePlaylistId,previousSignature=playlistSignature;
- try{
-  const nextItems=await prepareItems(rows,true);
-  if(!nextItems.length)throw new Error('Nenhum conteúdo ativo disponível.');
-  // Só ativa a nova playlist depois que TODOS os vídeos/imagens estiverem confirmados localmente.
-  items=nextItems;playlistSignature=sig;activePlaylistId=pid;index=0;
-  localStorage.setItem('vitrine_manifest_'+code,JSON.stringify({saved_at:Date.now(),playlist_id:pid,signature:sig,items:normalize(rows),orientation:screen.orientation}));
-  hideEmpty();if(started)playNext();return true;
- }catch(e){
-  console.error('PLAYLIST DOWNLOAD',e);items=previousItems;activePlaylistId=previousPlaylistId;playlistSignature=previousSignature;
-  if(previousItems.length){setStatus('Mantendo playlist anterior • download pendente • '+platform+' • v'+PLAYER_VERSION,true);return true}
-  throw e;
- }
+ playlistSignature=sig;activePlaylistId=pid;index=0;items=await prepareItems(rows);
+ localStorage.setItem('vitrine_manifest_'+code,JSON.stringify({saved_at:Date.now(),playlist_id:pid,items:normalize(rows),orientation:screen.orientation}));
+ if(!items.length){showEmpty('Nenhum conteúdo ativo disponível.');return false}
+ hideEmpty(); if(started)playNext(); return true;
 }
-async function loadCached(){try{const x=JSON.parse(localStorage.getItem('vitrine_manifest_'+code)||'null');if(x?.items?.length){applyOrientation(pathOrientation||x.orientation||'landscape');activePlaylistId=x.playlist_id||null;items=await prepareItems(x.items,false);setStatus('Offline • conteúdo em cache • '+platform,true);return true}}catch(e){}return false}
+async function loadCached(){try{const x=JSON.parse(localStorage.getItem('vitrine_manifest_'+code)||'null');if(x?.items?.length){applyOrientation(pathOrientation||x.orientation||'landscape');activePlaylistId=x.playlist_id||null;items=await prepareItems(x.items);setStatus('Offline • conteúdo em cache • '+platform,true);return true}}catch(e){}return false}
 function readDemo(key){try{return JSON.parse(localStorage.getItem('vd3_'+key)||'[]')}catch(e){return []}}
 const LOCAL_MEDIA_DB='vitrine_local_media_v1',LOCAL_MEDIA_STORE='files';
 function localMediaDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(LOCAL_MEDIA_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(LOCAL_MEDIA_STORE))r.result.createObjectStore(LOCAL_MEDIA_STORE)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -176,8 +120,8 @@ async function reconnect(){
 function installResilience(){
  window.addEventListener('offline',()=>setStatus('Offline • conteúdo em cache • '+platform+' • v'+PLAYER_VERSION,true));
  window.addEventListener('online',()=>{setStatus('Reconectando • '+platform+' • v'+PLAYER_VERSION,true);reconnect()});
- document.addEventListener('visibilitychange',()=>{if(!document.hidden)reconnect()});
- reconnectTimer=setInterval(()=>{if(navigator.onLine!==false)reconnect()},360000);
+ document.addEventListener('visibilitychange',()=>{});
+ reconnectTimer=setInterval(()=>{if(navigator.onLine!==false)reconnect()},300000);
 }
 
 
@@ -222,14 +166,14 @@ async function boot(){
    screen=data; applyOrientation(data.orientation||pathOrientation||p.get('orientation')||'landscape'); await enableTvMode();
    const ok=await loadPlaylist();
    setStatus('Online • '+platform+' • v'+PLAYER_VERSION,true);
-   heartbeat(true); heartbeatTimer=setInterval(()=>heartbeat(false),360000);
-   reloadTimer=setInterval(syncRemote,360000);
+   heartbeat(); heartbeatTimer=setInterval(heartbeat,300000);
+   reloadTimer=setInterval(syncRemote,300000);
    if(ok)start();
  }catch(e){
    console.error('PLAYER BOOT',e);
    setStatus('Erro remoto • '+platform+' • v'+PLAYER_VERSION,true);
    const ok=await loadCached();
-   if(!ok){showEmpty('Falha ao abrir mídia local: '+(e?.message||'erro desconhecido'));setStatus('Player parado para evitar novo consumo • '+platform+' • v'+PLAYER_VERSION,true);}
+   if(!ok)showEmpty('Falha ao sincronizar: '+(e?.message||'erro desconhecido'));
    if(ok)setTimeout(()=>{if(!started)start()},300);
  }
 }
