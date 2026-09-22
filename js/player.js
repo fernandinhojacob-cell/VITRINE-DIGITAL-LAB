@@ -32,7 +32,33 @@ function dayToken(d){return ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'][d.getDay
 function timeHHMM(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
 function scheduleMatches(s,now){const iso=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'),t=timeHHMM(now);if(s.active===false)return false;if(s.start_date&&iso<s.start_date)return false;if(s.end_date&&iso>s.end_date)return false;const st=String(s.start_time||'').slice(0,5),et=String(s.end_time||'').slice(0,5);if(st&&et&&st<=et){if(t<st||t>et)return false}else if(st&&et&&st>et){if(t>et&&t<st)return false}else{if(st&&t<st)return false;if(et&&t>et)return false}const days=String(s.days||'').split(',').map(x=>x.trim()).filter(Boolean);return !days.length||days.includes(dayToken(now))}
 async function resolvePlaylist(){if(!db||!screen)return {pid:screen?.playlist_id||null,blackout:false,syncGroup:null};try{let group=null;if(screen.group_id){const {data:g}=await db.from('groups').select('*').eq('id',screen.group_id).maybeSingle();group=g||null}const {data,error}=await db.from('schedules').select('*').eq('active',true);if(error)throw error;const relevant=(data||[]).filter(s=>s.screen_id===screen.id||(screen.group_id&&s.group_id===screen.group_id));if(!relevant.length){const pid=group?.playlist_id||screen.playlist_id||null;return {pid,blackout:false,syncGroup:group?.playlist_id?group:null}}const now=new Date();const matches=relevant.filter(s=>scheduleMatches(s,now));matches.sort((a,b)=>Number(b.screen_id===screen.id)-Number(a.screen_id===screen.id)||new Date(b.created_at)-new Date(a.created_at));if(!matches.length)return {pid:null,blackout:true,syncGroup:null};const chosen=matches[0],pid=chosen.playlist_id||group?.playlist_id||screen.playlist_id||null;return {pid,blackout:false,syncGroup:chosen.group_id?group:null}}catch(e){return {pid:screen.playlist_id||null,blackout:false,syncGroup:null}}}
-async function heartbeat(){if(!db||!screen)return;const now=new Date().toISOString();try{await db.from('screens').update({status:'online',ultima_conexao:now,player_version:PLAYER_VERSION,last_error:null}).eq('id',screen.id);await db.from('screen_heartbeat').insert({screen_id:screen.id,last_ping:now,player_version:PLAYER_VERSION})}catch(e){setStatus('Sem sincronização • '+platform,true)}}
+async function heartbeat(){
+ if(!db||!screen)return;
+ const now=new Date().toISOString();
+ try{
+  const {data,error}=await db.from('screens')
+   .update({status:'online',ultima_conexao:now,player_version:PLAYER_VERSION,last_error:null})
+   .eq('id',screen.id)
+   .select('id,status,ultima_conexao')
+   .maybeSingle();
+  if(error)throw error;
+  if(!data)throw new Error('Heartbeat não atualizou a tela '+code);
+  screen={...screen,...data};
+  // Histórico de heartbeat é auxiliar: falha nesta tabela não deve marcar o player como offline.
+  try{
+   await db.from('screen_heartbeat').insert({
+    screen_id:screen.id,
+    last_ping:now,
+    player_version:PLAYER_VERSION
+   });
+  }catch(logError){
+   console.warn('HEARTBEAT LOG',logError);
+  }
+ }catch(e){
+  console.error('HEARTBEAT',e);
+  setStatus('Sem sincronização • '+platform+' • v'+PLAYER_VERSION,true);
+ }
+}
 async function loadPlaylist(){
  if(!db||!screen)return false;
  const resolved=await resolvePlaylist();
