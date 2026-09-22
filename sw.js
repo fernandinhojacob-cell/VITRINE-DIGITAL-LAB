@@ -1,4 +1,4 @@
-const CACHE='vitrine-shell-v4191';
+const CACHE='vitrine-shell-v4340';
 const SHELL=['./player/index.html','./css/player.css','./js/player.js','./js/config.js','./manifest.webmanifest'];
 self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>{}));self.skipWaiting()});
 self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vitrine-shell-')&&k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});
