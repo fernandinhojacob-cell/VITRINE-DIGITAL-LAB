@@ -1,5 +1,5 @@
 (function(){'use strict';
-const PLAYER_VERSION='4.32.1-HEARTBEAT';
+const PLAYER_VERSION='4.32.2-HEARTBEAT-FINAL';
 const cfg=window.SUPABASE_CONFIG||{}, hasConfig=!!(cfg.url&&cfg.key&&!String(cfg.url).includes('SEU-PROJETO'));
 const root=document.getElementById('playerRoot'),stage=document.getElementById('stage'),status=document.getElementById('status'),empty=document.getElementById('empty'),emptyMessage=document.getElementById('emptyMessage'),startBtn=document.getElementById('startBtn'),fullscreenBtn=document.getElementById('fullscreenBtn');
 const p=new URLSearchParams(location.search), code=(p.get('code')||localStorage.getItem('vitrine_screen_code')||'TV-0001').trim(); localStorage.setItem('vitrine_screen_code',code);
@@ -33,31 +33,35 @@ function timeHHMM(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.ge
 function scheduleMatches(s,now){const iso=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'),t=timeHHMM(now);if(s.active===false)return false;if(s.start_date&&iso<s.start_date)return false;if(s.end_date&&iso>s.end_date)return false;const st=String(s.start_time||'').slice(0,5),et=String(s.end_time||'').slice(0,5);if(st&&et&&st<=et){if(t<st||t>et)return false}else if(st&&et&&st>et){if(t>et&&t<st)return false}else{if(st&&t<st)return false;if(et&&t>et)return false}const days=String(s.days||'').split(',').map(x=>x.trim()).filter(Boolean);return !days.length||days.includes(dayToken(now))}
 async function resolvePlaylist(){if(!db||!screen)return {pid:screen?.playlist_id||null,blackout:false,syncGroup:null};try{let group=null;if(screen.group_id){const {data:g}=await db.from('groups').select('*').eq('id',screen.group_id).maybeSingle();group=g||null}const {data,error}=await db.from('schedules').select('*').eq('active',true);if(error)throw error;const relevant=(data||[]).filter(s=>s.screen_id===screen.id||(screen.group_id&&s.group_id===screen.group_id));if(!relevant.length){const pid=group?.playlist_id||screen.playlist_id||null;return {pid,blackout:false,syncGroup:group?.playlist_id?group:null}}const now=new Date();const matches=relevant.filter(s=>scheduleMatches(s,now));matches.sort((a,b)=>Number(b.screen_id===screen.id)-Number(a.screen_id===screen.id)||new Date(b.created_at)-new Date(a.created_at));if(!matches.length)return {pid:null,blackout:true,syncGroup:null};const chosen=matches[0],pid=chosen.playlist_id||group?.playlist_id||screen.playlist_id||null;return {pid,blackout:false,syncGroup:chosen.group_id?group:null}}catch(e){return {pid:screen.playlist_id||null,blackout:false,syncGroup:null}}}
 async function heartbeat(){
- if(!db||!screen)return;
+ if(!db||!screen)return false;
  const now=new Date().toISOString();
- let presenceOk=false,screenUpdateError=null,logError=null;
+ let screenOk=false, logOk=false;
  try{
   const {error}=await db.from('screens')
-   .update({status:'online',ultima_conexao:now,player_version:PLAYER_VERSION,last_error:null})
+   .update({status:'online',ultima_conexao:now,updated_at:now})
    .eq('id',screen.id);
-  if(error)screenUpdateError=error;
-  else presenceOk=true;
- }catch(e){screenUpdateError=e}
+  if(error)throw error;
+  screen={...screen,status:'online',ultima_conexao:now,updated_at:now};
+  screenOk=true;
+ }catch(e){
+  console.error('HEARTBEAT screens',e);
+ }
  try{
   const {error}=await db.from('screen_heartbeat').insert({
-   screen_id:screen.id,last_ping:now,player_version:PLAYER_VERSION
+   screen_id:screen.id,
+   player_version:PLAYER_VERSION,
+   created_at:now
   });
-  if(error)logError=error;
-  else presenceOk=true;
- }catch(e){logError=e}
- if(presenceOk){
-  screen={...screen,status:'online',ultima_conexao:now};
-  return true;
+  if(error)throw error;
+  logOk=true;
+ }catch(e){
+  console.error('HEARTBEAT log',e);
  }
- console.error('HEARTBEAT screens',screenUpdateError);
- console.error('HEARTBEAT log',logError);
- setStatus('Sem heartbeat • '+platform+' • v'+PLAYER_VERSION,true);
- return false;
+ if(!screenOk && !logOk){
+  setStatus('Sem heartbeat • '+platform+' • v'+PLAYER_VERSION,true);
+  return false;
+ }
+ return true;
 }
 async function loadPlaylist(){
  if(!db||!screen)return false;
