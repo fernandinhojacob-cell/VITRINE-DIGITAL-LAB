@@ -207,36 +207,13 @@ document.addEventListener('submit',async e=>{const id=e.target.id;if(id==='scree
    if(gotStart!==wantStart||gotEnd!==wantEnd)throw new Error('O servidor não confirmou a mudança de horário.');
  }else await insert('schedules',scheduleRow)
 }
- if(id==='groupForm'){
-  e.preventDefault();
-  const gid=f.get('id');
-  const nome=String(f.get('name')||'').trim();
-  const playlistId=f.get('playlist_id')||null;
-  const selected=[...e.target.querySelectorAll('input[name="screen_ids"]:checked')].map(x=>x.value);
-  if(!nome)throw new Error('Informe o nome do grupo.');
-  let groupId;
-  if(gid){
-    const grupo=await update('groups',gid,{name:nome,playlist_id:playlistId,active:true});
-    groupId=grupo?.id||gid;
-  }else{
-    const grupo=await insert('groups',{name:nome,playlist_id:playlistId,active:true});
-    if(!grupo?.id)throw new Error('O Supabase não retornou o ID do grupo criado.');
-    groupId=grupo.id;
-  }
-  for(const scr of demo.screens){
-    if(selected.includes(scr.id))await update('screens',scr.id,{group_id:groupId});
-    else if(scr.group_id===groupId)await update('screens',scr.id,{group_id:null});
-  }
-  await render();
-}
+ if(id==='groupForm'){const gid=f.get('id');let g;if(gid){await update('groups',gid,{name:f.get('name'),playlist_id:f.get('playlist_id')||null});g=gid}else{g=(await insert('groups',{name:f.get('name'),playlist_id:f.get('playlist_id')||null,active:true})).id}const selected=[...e.target.querySelectorAll('input[name="screen_ids"]:checked')].map(x=>x.value);for(const s of demo.screens){if(db){if(selected.includes(s.id))await update('screens',s.id,{group_id:g});else if(s.group_id===g)await update('screens',s.id,{group_id:null})}else{if(selected.includes(s.id))s.group_id=g;else if(s.group_id===g)s.group_id=null}}save()}
  alert('Salvo com sucesso!');
  closeModal();await render();
  }catch(err){console.error(err);alert('Erro ao salvar: '+(err.message||String(err)))}});
 
 document.addEventListener('click',async e=>{try{
- const se=e.target.closest('[data-screen-edit]');if(se)return openScreen(se.dataset.screenEdit);
- const sd=e.target.closest('[data-screen-del]');if(sd){const s=demo.screens.find(x=>x.id===sd.dataset.screenDel);if(!s)return;const ok=confirm(`Excluir a tela "${s.name}" (${s.code})?\n\nEsta ação não pode ser desfeita.`);if(!ok)return;try{await remove('screens',s.id);vdToast('Tela excluída com sucesso.','success');await render()}catch(err){console.error(err);vdToast('Não foi possível excluir a tela: '+(err?.message||err),'error')}return}
- const st=e.target.closest('[data-screen-test]');if(st){const s=demo.screens.find(x=>x.id===st.dataset.screenTest);if(s){const u=db?`../player/index.html?code=${encodeURIComponent(s.code)}`:`index.html?localPlayer=${encodeURIComponent(s.code)}&orientation=${encodeURIComponent(s.orientation||'landscape')}`;window.open(u,'_blank')}return}
+ const se=e.target.closest('[data-screen-edit]');if(se)return openScreen(se.dataset.screenEdit);const st=e.target.closest('[data-screen-test]');if(st){const s=demo.screens.find(x=>x.id===st.dataset.screenTest);if(s){const u=db?`../player/index.html?code=${encodeURIComponent(s.code)}`:`index.html?localPlayer=${encodeURIComponent(s.code)}&orientation=${encodeURIComponent(s.orientation||'landscape')}`;window.open(u,'_blank')}return}const sdel=e.target.closest('[data-screen-del]');if(sdel){const sid=sdel.dataset.screenDel;const scr=demo.screens.find(x=>x.id===sid);if(!confirm(`Excluir a tela ${scr?.name||scr?.code||''}?`))return;try{if(db){const {error:schErr}=await db.from('schedules').delete().eq('screen_id',sid);if(schErr)throw schErr;const {error:scrErr}=await db.from('screens').delete().eq('id',sid);if(scrErr)throw scrErr}else{demo.schedules=(demo.schedules||[]).filter(x=>x.screen_id!==sid);demo.screens=(demo.screens||[]).filter(x=>x.id!==sid);save()}await render();alert('Tela excluída com sucesso!')}catch(err){console.error('screen delete',err);alert('Erro ao excluir tela: '+(err.message||String(err)))}return}
  const mp=e.target.closest('[data-media-preview]');if(mp)return previewMedia(mp.dataset.mediaPreview); const md=e.target.closest('[data-media-edit]');if(md)return openMedia(md.dataset.mediaEdit);const delm=e.target.closest('[data-media-del]');if(delm&&confirm('Excluir este conteúdo?')){await remove('media',delm.dataset.mediaDel);await render();return}
  const pd=e.target.closest('[data-playlist-del]');if(pd&&confirm('Excluir esta playlist?')){await remove('playlists',pd.dataset.playlistDel);await render();return}const pa=e.target.closest('[data-playlist-add]');if(pa)return addPlaylistItem(pa.dataset.playlistAdd);const di=e.target.closest('[data-item-del]');if(di){await remove('playlist_items',di.dataset.itemDel);await render();return}const iu=e.target.closest('[data-item-up]');if(iu){await movePlaylistItem(iu.dataset.itemUp,-1);return}const idn=e.target.closest('[data-item-down]');if(idn){await movePlaylistItem(idn.dataset.itemDown,1);return}const pv=e.target.closest('[data-playlist-preview]');if(pv)return previewPlaylist(pv.dataset.playlistPreview);
  const sed=e.target.closest('[data-schedule-edit]');if(sed)return openSchedule(sed.dataset.scheduleEdit);
