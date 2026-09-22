@@ -1,5 +1,5 @@
 (function(){'use strict';
-const PLAYER_VERSION='4.32.4-LOW-EGRESS-URLFIX';
+const PLAYER_VERSION='4.34.0-LOCAL-FIRST';
 const cfg=window.SUPABASE_CONFIG||{}, hasConfig=!!(cfg.url&&cfg.key&&!String(cfg.url).includes('SEU-PROJETO'));
 const root=document.getElementById('playerRoot'),stage=document.getElementById('stage'),status=document.getElementById('status'),empty=document.getElementById('empty'),emptyMessage=document.getElementById('emptyMessage'),startBtn=document.getElementById('startBtn'),fullscreenBtn=document.getElementById('fullscreenBtn');
 const p=new URLSearchParams(location.search), code=(p.get('code')||localStorage.getItem('vitrine_screen_code')||'TV-0001').trim(); localStorage.setItem('vitrine_screen_code',code);
@@ -14,41 +14,39 @@ function clearStage(){if(timer)clearTimeout(timer);timer=null;stage.innerHTML=''
 async function fs(){try{if(document.fullscreenElement)return;if(root.requestFullscreen)await root.requestFullscreen();else if(root.webkitRequestFullscreen)root.webkitRequestFullscreen()}catch(e){}}
 async function start(){started=true;startBtn.textContent='Reproduzindo';startBtn.disabled=true;await fs();playNext()} startBtn.onclick=start;fullscreenBtn.onclick=fs;document.onkeydown=e=>{if(e.key==='Enter'&&!started)start()};
 function normalize(rows){return(rows||[]).map(r=>{const m=r.media||r;return{id:m.id,type:m.type||'text',url:m.file_url||'',text:m.text_content||m.name||'',duration:Number(r.duration||m.duration||8),transition:r.transition||'fade'}}).filter(x=>(x.type==='text')||x.url)}
-const REMOTE_MEDIA_DB='vitrine_remote_media_v1',REMOTE_MEDIA_STORE='files';
+const REMOTE_MEDIA_DB='vitrine_remote_media_v3',REMOTE_MEDIA_STORE='files';
+const mediaObjectUrls=new Map(),mediaDownloadLocks=new Map();
 function remoteMediaDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(REMOTE_MEDIA_DB,1);r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains(REMOTE_MEDIA_STORE))d.createObjectStore(REMOTE_MEDIA_STORE)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-async function idbGetRemote(url){try{const d=await remoteMediaDb();const v=await new Promise((resolve,reject)=>{const r=d.transaction(REMOTE_MEDIA_STORE,'readonly').objectStore(REMOTE_MEDIA_STORE).get(url);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});d.close();return v||null}catch(e){return null}}
-async function idbPutRemote(url,blob){try{const d=await remoteMediaDb();await new Promise((resolve,reject)=>{const r=d.transaction(REMOTE_MEDIA_STORE,'readwrite').objectStore(REMOTE_MEDIA_STORE).put(blob,url);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)});d.close();return true}catch(e){return false}}
-const MEDIA_CACHE='vitrine-media-v433',mediaObjectUrls=new Map();
-async function cachedUrl(url){
- if(!url)return url;
- if(mediaObjectUrls.has(url))return mediaObjectUrls.get(url);
- try{
-  if('caches' in window){
-   const cache=await caches.open(MEDIA_CACHE);
-   let res=await cache.match(url);
-   if(!res){
-    res=await fetch(url,{mode:'cors',cache:'force-cache'});
-    if(res&&res.ok){
-     try{await cache.put(url,res.clone())}catch(e){console.warn('cache put',e)}
-    }
-   }
-   if(res&&res.ok){
-    const blob=await res.blob();
-    const local=URL.createObjectURL(blob);
-    mediaObjectUrls.set(url,local);
-    return local;
-   }
-  }
-  const saved=await idbGetRemote(url);
-  if(saved){
-   const local=URL.createObjectURL(saved);
-   mediaObjectUrls.set(url,local);
-   return local;
-  }
- }catch(e){console.warn('media cache',e)}
- return url
+async function idbGetRemote(key){try{const d=await remoteMediaDb();const v=await new Promise((resolve,reject)=>{const r=d.transaction(REMOTE_MEDIA_STORE,'readonly').objectStore(REMOTE_MEDIA_STORE).get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});d.close();return v||null}catch(e){console.warn('IDB read',e);return null}}
+async function idbPutRemote(key,blob){try{const d=await remoteMediaDb();await new Promise((resolve,reject)=>{const tx=d.transaction(REMOTE_MEDIA_STORE,'readwrite');tx.objectStore(REMOTE_MEDIA_STORE).put(blob,key);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('IDB abort'))});d.close();const check=await idbGetRemote(key);return !!(check&&check.size===blob.size)}catch(e){console.error('IDB save',e);return false}}
+function mediaKey(x){return 'media:'+(x.id||'sem-id')+'|'+(x.url||'')}
+async function persistentMediaUrl(x,allowDownload=true){
+ const url=x?.url||''; if(!url)return '';
+ const key=mediaKey(x); if(mediaObjectUrls.has(key))return mediaObjectUrls.get(key);
+ const saved=await idbGetRemote(key);
+ if(saved){const local=URL.createObjectURL(saved);mediaObjectUrls.set(key,local);return local}
+ if(!allowDownload||navigator.onLine===false)return '';
+ if(mediaDownloadLocks.has(key))return mediaDownloadLocks.get(key);
+ const job=(async()=>{
+  setStatus('Baixando conteúdo novo • '+platform+' • v'+PLAYER_VERSION,true);
+  const res=await fetch(url,{mode:'cors',cache:'no-store'}); if(!res.ok)throw new Error('HTTP '+res.status);
+  const blob=await res.blob(); if(!blob||!blob.size)throw new Error('arquivo vazio');
+  const ok=await idbPutRemote(key,blob); if(!ok)throw new Error('armazenamento local indisponível');
+  const stored=await idbGetRemote(key); if(!stored)throw new Error('falha ao confirmar arquivo local');
+  const local=URL.createObjectURL(stored);mediaObjectUrls.set(key,local);return local;
+ })().finally(()=>mediaDownloadLocks.delete(key));
+ mediaDownloadLocks.set(key,job);return job;
 }
-async function prepareItems(rows){const normalized=normalize(rows);for(const x of normalized){if(String(x.url||'').startsWith('idb://'))x.playUrl=await localMediaUrl(x.url);else x.playUrl=x.url&&/^https?:/i.test(x.url)?await cachedUrl(x.url):x.url}return normalized.filter(x=>x.type==='text'||x.playUrl||x.url)}
+async function prepareItems(rows,allowDownload=true){
+ const normalized=normalize(rows),prepared=[];
+ for(const x of normalized){
+  if(String(x.url||'').startsWith('idb://'))x.playUrl=await localMediaUrl(x.url);
+  else if((x.type==='video'||x.type==='image')&&/^https?:/i.test(x.url||''))x.playUrl=await persistentMediaUrl(x,allowDownload);
+  else x.playUrl=x.url;
+  if(x.type==='text'||x.type==='web'||x.playUrl)prepared.push(x); else throw new Error('Mídia não disponível localmente: '+(x.text||x.id||'arquivo'));
+ }
+ return prepared;
+}
 async function finishProof(){if(!db||!currentProof)return;try{await db.from('proof_of_play').update({ended_at:new Date().toISOString(),duration_seconds:Math.max(0,Math.round((Date.now()-currentProof.started)/1000))}).eq('id',currentProof.id)}catch(e){}currentProof=null}
 async function beginProof(x){await finishProof();if(!db||!screen||!x?.id)return;try{const {data}=await db.from('proof_of_play').insert({screen_id:screen.id,media_id:x.id,playlist_id:activePlaylistId,started_at:new Date().toISOString(),status:'played'}).select('id').maybeSingle();if(data?.id)currentProof={id:data.id,started:Date.now()}}catch(e){}}
 function syncPosition(){if(!activeSyncGroup||!items.length)return null;const durations=items.map(x=>Math.max(2,Number(x.duration||8))),total=durations.reduce((a,b)=>a+b,0);if(!total)return null;let pos=(Date.now()/1000)%total;for(let i=0;i<durations.length;i++){if(pos<durations[i])return {index:i,offset:pos,remaining:Math.max(.25,durations[i]-pos)};pos-=durations[i]}return {index:0,offset:0,remaining:durations[0]}}
@@ -112,12 +110,21 @@ async function loadPlaylist(){
  const rows=(pi||[]).map(r=>({...r,media:byId.get(r.media_id)})).filter(r=>r.media&&r.media.active!==false);
  const sig=pid+'|'+(activeSyncGroup?.id||'solo')+'|'+JSON.stringify(rows.map(r=>[r.id,r.sort_order,r.duration,r.media.id,r.media.file_url]));
  if(sig===playlistSignature)return true;
- playlistSignature=sig;activePlaylistId=pid;index=0;items=await prepareItems(rows);
- localStorage.setItem('vitrine_manifest_'+code,JSON.stringify({saved_at:Date.now(),playlist_id:pid,items:normalize(rows),orientation:screen.orientation}));
- if(!items.length){showEmpty('Nenhum conteúdo ativo disponível.');return false}
- hideEmpty(); if(started)playNext(); return true;
+ const previousItems=items,previousPlaylistId=activePlaylistId,previousSignature=playlistSignature;
+ try{
+  const nextItems=await prepareItems(rows,true);
+  if(!nextItems.length)throw new Error('Nenhum conteúdo ativo disponível.');
+  // Só ativa a nova playlist depois que TODOS os vídeos/imagens estiverem confirmados localmente.
+  items=nextItems;playlistSignature=sig;activePlaylistId=pid;index=0;
+  localStorage.setItem('vitrine_manifest_'+code,JSON.stringify({saved_at:Date.now(),playlist_id:pid,signature:sig,items:normalize(rows),orientation:screen.orientation}));
+  hideEmpty();if(started)playNext();return true;
+ }catch(e){
+  console.error('PLAYLIST DOWNLOAD',e);items=previousItems;activePlaylistId=previousPlaylistId;playlistSignature=previousSignature;
+  if(previousItems.length){setStatus('Mantendo playlist anterior • download pendente • '+platform+' • v'+PLAYER_VERSION,true);return true}
+  throw e;
+ }
 }
-async function loadCached(){try{const x=JSON.parse(localStorage.getItem('vitrine_manifest_'+code)||'null');if(x?.items?.length){applyOrientation(pathOrientation||x.orientation||'landscape');activePlaylistId=x.playlist_id||null;items=await prepareItems(x.items);setStatus('Offline • conteúdo em cache • '+platform,true);return true}}catch(e){}return false}
+async function loadCached(){try{const x=JSON.parse(localStorage.getItem('vitrine_manifest_'+code)||'null');if(x?.items?.length){applyOrientation(pathOrientation||x.orientation||'landscape');activePlaylistId=x.playlist_id||null;items=await prepareItems(x.items,false);setStatus('Offline • conteúdo em cache • '+platform,true);return true}}catch(e){}return false}
 function readDemo(key){try{return JSON.parse(localStorage.getItem('vd3_'+key)||'[]')}catch(e){return []}}
 const LOCAL_MEDIA_DB='vitrine_local_media_v1',LOCAL_MEDIA_STORE='files';
 function localMediaDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(LOCAL_MEDIA_DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(LOCAL_MEDIA_STORE))r.result.createObjectStore(LOCAL_MEDIA_STORE)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
@@ -154,7 +161,7 @@ function installResilience(){
  window.addEventListener('offline',()=>setStatus('Offline • conteúdo em cache • '+platform+' • v'+PLAYER_VERSION,true));
  window.addEventListener('online',()=>{setStatus('Reconectando • '+platform+' • v'+PLAYER_VERSION,true);reconnect()});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)reconnect()});
- reconnectTimer=setInterval(()=>{if(navigator.onLine!==false)reconnect()},120000);
+ reconnectTimer=setInterval(()=>{if(navigator.onLine!==false)reconnect()},360000);
 }
 
 
@@ -199,8 +206,8 @@ async function boot(){
    screen=data; applyOrientation(data.orientation||pathOrientation||p.get('orientation')||'landscape'); await enableTvMode();
    const ok=await loadPlaylist();
    setStatus('Online • '+platform+' • v'+PLAYER_VERSION,true);
-   heartbeat(); heartbeatTimer=setInterval(heartbeat,60000);
-   reloadTimer=setInterval(syncRemote,120000);
+   heartbeat(); heartbeatTimer=setInterval(heartbeat,360000);
+   reloadTimer=setInterval(syncRemote,360000);
    if(ok)start();
  }catch(e){
    console.error('PLAYER BOOT',e);
