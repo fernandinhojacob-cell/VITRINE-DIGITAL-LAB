@@ -1,5 +1,5 @@
 (function(){'use strict';
-const PLAYER_VERSION='4.32.0-LOW-EGRESS';
+const PLAYER_VERSION='4.32.1-HEARTBEAT';
 const cfg=window.SUPABASE_CONFIG||{}, hasConfig=!!(cfg.url&&cfg.key&&!String(cfg.url).includes('SEU-PROJETO'));
 const root=document.getElementById('playerRoot'),stage=document.getElementById('stage'),status=document.getElementById('status'),empty=document.getElementById('empty'),emptyMessage=document.getElementById('emptyMessage'),startBtn=document.getElementById('startBtn'),fullscreenBtn=document.getElementById('fullscreenBtn');
 const p=new URLSearchParams(location.search), code=(p.get('code')||localStorage.getItem('vitrine_screen_code')||'TV-0001').trim(); localStorage.setItem('vitrine_screen_code',code);
@@ -35,29 +35,29 @@ async function resolvePlaylist(){if(!db||!screen)return {pid:screen?.playlist_id
 async function heartbeat(){
  if(!db||!screen)return;
  const now=new Date().toISOString();
+ let presenceOk=false,screenUpdateError=null,logError=null;
  try{
-  const {data,error}=await db.from('screens')
+  const {error}=await db.from('screens')
    .update({status:'online',ultima_conexao:now,player_version:PLAYER_VERSION,last_error:null})
-   .eq('id',screen.id)
-   .select('id,status,ultima_conexao')
-   .maybeSingle();
-  if(error)throw error;
-  if(!data)throw new Error('Heartbeat não atualizou a tela '+code);
-  screen={...screen,...data};
-  // Histórico de heartbeat é auxiliar: falha nesta tabela não deve marcar o player como offline.
-  try{
-   await db.from('screen_heartbeat').insert({
-    screen_id:screen.id,
-    last_ping:now,
-    player_version:PLAYER_VERSION
-   });
-  }catch(logError){
-   console.warn('HEARTBEAT LOG',logError);
-  }
- }catch(e){
-  console.error('HEARTBEAT',e);
-  setStatus('Sem sincronização • '+platform+' • v'+PLAYER_VERSION,true);
+   .eq('id',screen.id);
+  if(error)screenUpdateError=error;
+  else presenceOk=true;
+ }catch(e){screenUpdateError=e}
+ try{
+  const {error}=await db.from('screen_heartbeat').insert({
+   screen_id:screen.id,last_ping:now,player_version:PLAYER_VERSION
+  });
+  if(error)logError=error;
+  else presenceOk=true;
+ }catch(e){logError=e}
+ if(presenceOk){
+  screen={...screen,status:'online',ultima_conexao:now};
+  return true;
  }
+ console.error('HEARTBEAT screens',screenUpdateError);
+ console.error('HEARTBEAT log',logError);
+ setStatus('Sem heartbeat • '+platform+' • v'+PLAYER_VERSION,true);
+ return false;
 }
 async function loadPlaylist(){
  if(!db||!screen)return false;
