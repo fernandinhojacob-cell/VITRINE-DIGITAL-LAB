@@ -404,7 +404,3 @@ body{min-height:100dvh;-webkit-text-size-adjust:100%}
 #playlists .video-thumb-error:after{content:'!';position:absolute;inset:4px 4px auto auto;background:#8b2032;color:#fff;border-radius:999px;width:18px;height:18px;display:grid;place-items:center;font-weight:800}
 .video-status{margin-top:8px;padding:10px 12px;border-radius:9px;background:#101d2a;color:#9fb3c8;font-size:13px}.video-status.ok{color:#8ee5b2}.video-status.bad{color:#ff9aaa;background:#31131a}
 @media(max-width:700px){#playlists .playlist-preview-hint{font-size:10px}}
-
-/* Vitrine 5.1 — Network Health */
-.monitor-state.delayed{background:rgba(245,158,11,.92);color:#08111f}
-.status-delayed{color:#f59e0b;font-weight:700}

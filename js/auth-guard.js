@@ -1,0 +1,2 @@
+/* Vitrine Digital PRO 4.11 — guarda do painel remoto. Demo local continua livre. */
+(async()=>{const c=window.SUPABASE_CONFIG||{};if(!c.url||!c.key||String(c.url).includes('SEU-PROJETO'))return;try{const client=window.supabase.createClient(c.url,c.key);const {data}=await client.auth.getSession();if(!data.session&&!location.pathname.endsWith('/login.html'))location.replace('login.html')}catch(e){console.error('auth guard',e)}})();
