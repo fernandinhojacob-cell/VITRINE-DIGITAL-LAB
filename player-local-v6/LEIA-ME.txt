@@ -1,0 +1,18 @@
+VITRINE DIGITAL — PLAYER LOCAL 6.0 (TESTE PC)
+
+Baseado no diagnóstico que passou com 5 mídias:
+- mídia salva como Blob no IndexedDB;
+- reprodução usa somente blob: local;
+- playlist persistida para reabrir sem novo download;
+- consulta o Supabase a cada 6 minutos;
+- só baixa mídia ausente/alterada;
+- heartbeat pequeno a cada 60 segundos para Online/Offline.
+
+TESTE SEPARADO:
+1. Envie a pasta player-local-v6 para a raiz do repositório.
+2. NÃO substitua player, player-local ou admin.
+3. Abra /player-local-v6/?code=TV-0001 no PC.
+4. Depois de carregar, feche e reabra. Os vídeos devem continuar locais.
+5. Só depois da validação no PC testar na The Frame.
+
+Observação: a programação horária será incorporada após validar o mecanismo local na The Frame, evitando confundir o teste de cache com bloqueio de horário.
