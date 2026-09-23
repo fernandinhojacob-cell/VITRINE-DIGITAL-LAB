@@ -1,7 +1,7 @@
 (()=>{"use strict";
 const VER="6.0.0-IDB-LOCAL"; const CFG=window.SUPABASE_CONFIG||{}; const BASE=(CFG.url||"").replace(/\/$/,""); const KEY=CFG.key||"";
 const CODE=new URLSearchParams(location.search).get("code")||"TV-0001"; const DBN="vd_player_local_v6", MEDIA="media", META="meta";
-const CHECK_MS=6*60*1000, HEART_MS=60*1000; let db=null,screen=null,active=[],idx=0,currentObjectUrl=null,playing=false;
+const CHECK_MS=6*60*1000, HEART_MS=60*1000; let sessionDownloads=0; let db=null,screen=null,active=[],idx=0,currentObjectUrl=null,playing=false;
 const stage=document.getElementById("stage"),msg=document.getElementById("msg");
 function show(t){msg.textContent=t;msg.style.display="flex"} function hide(){msg.style.display="none"}
 function hdr(extra={}){return Object.assign({"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"},extra)}
@@ -22,7 +22,7 @@ async function ensure(x){
  if(rec&&rec.fp===fp&&rec.blob instanceof Blob)return Object.assign({},x,{blob:rec.blob});
  show("Baixando conteúdo novo: "+x.name);
  let r=await fetch(x.url,{cache:"no-store"}); if(!r.ok)throw Error("Download "+r.status+" "+x.name);
- let blob=await r.blob(); await put(MEDIA,x.media_id,{fp,blob,name:x.name,saved_at:Date.now()});
+ let blob=await r.blob(); sessionDownloads++; await put(MEDIA,x.media_id,{fp,blob,name:x.name,saved_at:Date.now()});
  return Object.assign({},x,{blob});
 }
 async function saveManifest(items){await put(META,"playlist",{screen,items:items.map(x=>{let y=Object.assign({},x);delete y.blob;return y}),saved_at:Date.now()})}
@@ -53,6 +53,17 @@ async function heartbeat(){
  if(!screen)return;
  try{await rest("screens?id=eq."+screen.id,{method:"PATCH",headers:hdr({"Prefer":"return=minimal"}),body:JSON.stringify({status:"online",ultima_conexao:new Date().toISOString()})})}catch(e){}
 }
+
+async function diagnosticSnapshot(){
+ let m=await get(META,"playlist"), rows=(m&&m.items)||[], count=0, bytes=0;
+ for(const x of rows){let rec=await get(MEDIA,x.media_id);if(rec&&rec.blob instanceof Blob){count++;bytes+=rec.blob.size}}
+ return {version:VER,screen:CODE,files:count,mb:(bytes/1048576).toFixed(1),sessionDownloads};
+}
+window.VD_LOCAL_DIAGNOSTICO=async function(){
+ const d=await diagnosticSnapshot();
+ alert("Vitrine Local "+d.version+"\nTela: "+d.screen+"\nArquivos no IndexedDB: "+d.files+"\nArmazenado: "+d.mb+" MB\nDownloads nesta abertura: "+d.sessionDownloads+"\n\nEsperado após fechar/reabrir: Downloads nesta abertura = 0");
+ return d;
+};
 async function boot(){
  if(!BASE||!KEY){show("Configuração Supabase ausente");return}
  db=await openDB(); active=await localFromManifest(); if(active.length){idx=0;next()}
