@@ -1,20 +1,16 @@
-VITRINE DIGITAL PLAYER LOCAL 6.1 OPERACIONAL
+VITRINE DIGITAL LOCAL 6.2 — OPERACIONAL FULLSCREEN
 
-Mantém o núcleo aprovado na The Frame: IndexedDB + Blob local.
+Base: 6.1 operacional validada.
+Alterações desta versão:
+- mantém IndexedDB e reprodução LOCAL blob;
+- mantém download somente de mídia nova/alterada;
+- mantém remoção local de mídia retirada da playlist;
+- mantém heartbeat e programação;
+- remove botão DIAG e pop-ups de diagnóstico;
+- ocupa 100% da área do navegador;
+- tenta entrar em tela cheia automaticamente;
+- se o navegador exigir interação, qualquer clique/toque/tecla tenta ativar tela cheia.
 
-Inclui:
-- playlist do Supabase;
-- download apenas de mídia nova/alterada;
-- troca somente após concluir os downloads;
-- reprodução local e continuidade após reabrir;
-- programação por dia/horário;
-- checagem de atualização a cada 6 minutos;
-- heartbeat para Online/Offline;
-- remoção local de mídia que saiu da playlist após atualização concluída;
-- funcionamento com conteúdo local se a internet cair.
-
-INSTALAÇÃO DE TESTE SEGURA:
-Envie a pasta player-local-v6-operacional para a raiz do repositório. Não substitui player-local-v6.
-URL: /player-local-v6-operacional/?code=TV-0001
-
-A programação atualmente cadastrada no Supabase continua sendo a fonte de verdade.
+Não altera Supabase, painel administrativo nem banco.
+URL após publicar a pasta:
+/player-local-v6-operacional/?code=TV-0001

@@ -1,9 +1,28 @@
 (()=>{"use strict";
-const VER="6.1.0-OPERACIONAL-LOCAL"; const CFG=window.SUPABASE_CONFIG||{}; const BASE=(CFG.url||"").replace(/\/$/,""); const KEY=CFG.key||"";
+const VER="6.2.0-OPERACIONAL-FULLSCREEN"; const CFG=window.SUPABASE_CONFIG||{}; const BASE=(CFG.url||"").replace(/\/$/,""); const KEY=CFG.key||"";
 const CODE=new URLSearchParams(location.search).get("code")||"TV-0001"; const DBN="vd_player_local_v6", MEDIA="media", META="meta";
 const CHECK_MS=6*60*1000, HEART_MS=60*1000; let sessionDownloads=0; let db=null,screen=null,active=[],idx=0,currentObjectUrl=null,playing=false,scheduleTimer=null;
 const stage=document.getElementById("stage"),msg=document.getElementById("msg");
 function show(t){msg.textContent=t;msg.style.display="flex"} function hide(){msg.style.display="none"}
+function isFullscreen(){return !!(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement)}
+async function requestFullscreen(){
+ if(isFullscreen())return true;
+ const el=document.documentElement;
+ try{
+   if(el.requestFullscreen)await el.requestFullscreen({navigationUI:"hide"});
+   else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+   else if(el.msRequestFullscreen)el.msRequestFullscreen();
+ }catch(e){}
+ return isFullscreen();
+}
+function armFullscreen(){
+ const go=()=>{requestFullscreen();};
+ document.addEventListener("pointerdown",go,{passive:true});
+ document.addEventListener("touchstart",go,{passive:true});
+ document.addEventListener("click",go,{passive:true});
+ document.addEventListener("keydown",go);
+ window.addEventListener("focus",()=>setTimeout(requestFullscreen,250));
+}
 function hdr(extra={}){return Object.assign({"apikey":KEY,"Authorization":"Bearer "+KEY,"Content-Type":"application/json"},extra)}
 async function rest(path,opt={}){let r=await fetch(BASE+"/rest/v1/"+path,Object.assign({headers:hdr()},opt));if(!r.ok)throw Error("REST "+r.status+" "+await r.text());let t=await r.text();return t?JSON.parse(t):null}
 function openDB(){return new Promise((a,b)=>{let r=indexedDB.open(DBN,1);r.onupgradeneeded=()=>{let d=r.result;if(!d.objectStoreNames.contains(MEDIA))d.createObjectStore(MEDIA);if(!d.objectStoreNames.contains(META))d.createObjectStore(META)};r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error)})}
@@ -56,7 +75,7 @@ function next(){
  let el;
  if((x.type||"").toLowerCase()==="image"){el=document.createElement("img");el.src=currentObjectUrl;stage.appendChild(el);setTimeout(next,Math.max(1,+x.duration||10)*1000)}
  else{el=document.createElement("video");el.autoplay=true;el.muted=true;el.playsInline=true;el.src=currentObjectUrl;stage.appendChild(el);el.addEventListener("ended",next,{once:true});el.addEventListener("error",()=>setTimeout(next,1000),{once:true});el.play().catch(()=>{})}
- playing=true;
+ playing=true;setTimeout(requestFullscreen,100);
 }
 async function refresh(){
  try{
@@ -73,17 +92,8 @@ async function heartbeat(){
  try{await rest("screens?id=eq."+screen.id,{method:"PATCH",headers:hdr({"Prefer":"return=minimal"}),body:JSON.stringify({status:"online",ultima_conexao:new Date().toISOString()})})}catch(e){}
 }
 
-async function diagnosticSnapshot(){
- let m=await get(META,"playlist"), rows=(m&&m.items)||[], count=0, bytes=0;
- for(const x of rows){let rec=await get(MEDIA,x.media_id);if(rec&&rec.blob instanceof Blob){count++;bytes+=rec.blob.size}}
- return {version:VER,screen:CODE,files:count,mb:(bytes/1048576).toFixed(1),sessionDownloads};
-}
-window.VD_LOCAL_DIAGNOSTICO=async function(){
- const d=await diagnosticSnapshot();
- alert("Vitrine Local "+d.version+"\nTela: "+d.screen+"\nArquivos no IndexedDB: "+d.files+"\nArmazenado: "+d.mb+" MB\nDownloads nesta abertura: "+d.sessionDownloads+"\n\nEsperado após fechar/reabrir: Downloads nesta abertura = 0");
- return d;
-};
 async function boot(){
+ armFullscreen();setTimeout(requestFullscreen,300);
  if(!BASE||!KEY){show("Configuração Supabase ausente");return}
  db=await openDB(); active=await localFromManifest(); if(active.length){idx=0;next()}
  await refresh(); await applySchedule(); await heartbeat(); setInterval(refresh,CHECK_MS);setInterval(heartbeat,HEART_MS);scheduleTimer=setInterval(applySchedule,30000);
