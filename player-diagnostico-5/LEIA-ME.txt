@@ -1,0 +1,1 @@
+Envie a pasta player-diagnostico-5 para a raiz do GitHub. Na primeira abertura: Downloads acumulados = 5. Feche e reabra: deve continuar = 5. Não altera o sistema principal.
