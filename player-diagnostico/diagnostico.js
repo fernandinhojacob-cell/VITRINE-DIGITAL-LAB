@@ -1,0 +1,26 @@
+(function(){'use strict';
+const CODE=(new URLSearchParams(location.search).get('code')||'TV-0001').trim();
+const C=window.SUPABASE_CONFIG, API=C.url+'/rest/v1', KEY=C.key, H={apikey:KEY,Authorization:'Bearer '+KEY};
+const DB='VD_DIAG_TF_1', STORE='media', results=document.getElementById('results'), state=document.getElementById('state'), logEl=document.getElementById('log'), video=document.getElementById('video'), playInfo=document.getElementById('playInfo');
+let rows=[]; function row(name,val,ok){rows.push({name,val,ok});results.innerHTML=rows.map(x=>'<p><b>'+x.name+':</b> <span class="'+(x.ok===true?'ok':x.ok===false?'bad':'wait')+'">'+x.val+'</span></p>').join('')}
+function log(s){logEl.innerHTML+='<p>'+new Date().toLocaleTimeString()+' — '+s+'</p>';console.log('[VD-DIAG]',s)}
+async function q(path){const r=await fetch(API+path,{headers:H,cache:'no-store'});if(!r.ok)throw new Error(await r.text());return r.json()}
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE,{keyPath:'id'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function put(v){const db=await openDB();return new Promise((res,rej)=>{const t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(v);t.oncomplete=()=>{db.close();res()};t.onerror=()=>rej(t.error)})}
+async function get(id){const db=await openDB();return new Promise((res,rej)=>{const t=db.transaction(STORE,'readonly'),r=t.objectStore(STORE).get(id);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error);t.oncomplete=()=>db.close()})}
+async function chooseMedia(){const ss=await q('/screens?code=eq.'+encodeURIComponent(CODE)+'&active=eq.true&select=id,playlist_id');if(!ss.length)throw new Error('Tela não encontrada');const pid=ss[0].playlist_id;if(!pid)throw new Error('Tela sem playlist');const pi=await q('/playlist_items?playlist_id=eq.'+pid+'&select=media_id,sort_order,position&order=sort_order.asc');const ids=pi.map(x=>x.media_id).filter(Boolean);const ms=await q('/media?id=in.('+ids.join(',')+')&active=eq.true&select=id,name,type,url,file_url,updated_at');const mm=Object.fromEntries(ms.map(x=>[x.id,x]));const ordered=pi.map(p=>mm[p.media_id]).filter(Boolean);return ordered.sort((a,b)=>((a.file_url||a.url||'').toLowerCase().endsWith('.mp4')?-1:1))[0]}
+async function boot(){
+ row('User agent',navigator.userAgent||'indisponível',null);
+ row('IndexedDB',('indexedDB'in window)?'disponível':'não disponível',('indexedDB'in window));
+ row('CacheStorage',('caches'in window)?'disponível':'não disponível',('caches'in window));
+ row('Blob URL',('URL'in window&&'createObjectURL'in URL)?'disponível':'não disponível',('URL'in window&&'createObjectURL'in URL));
+ row('Service Worker',('serviceWorker'in navigator)?'disponível':'não disponível',('serviceWorker'in navigator));
+ if(navigator.storage&&navigator.storage.estimate){try{const e=await navigator.storage.estimate();row('Armazenamento estimado',Math.round((e.usage||0)/1048576)+' MB usados / '+Math.round((e.quota||0)/1048576)+' MB quota',true)}catch(e){row('Armazenamento estimado','erro: '+e.message,false)}}else row('Armazenamento estimado','API indisponível',null);
+ try{const test=new Blob(['vitrine-digital']);await put({id:'__test__',blob:test,fp:'1'});const back=await get('__test__');row('Gravação/leitura IndexedDB',back&&back.blob&&back.blob.size===test.size?'OK':'FALHOU',!!(back&&back.blob&&back.blob.size===test.size))}catch(e){row('Gravação/leitura IndexedDB','FALHOU: '+e.message,false)}
+ try{const m=await chooseMedia(), url=m.file_url||m.url, fp=[m.id,url,m.updated_at||''].join('|');row('Mídia de teste',m.name,true);let saved=await get(m.id);if(!saved||saved.fp!==fp||!saved.blob||!saved.blob.size){state.textContent='Baixando 1 mídia de teste…';log('DOWNLOAD DE REDE iniciado: '+m.name);const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob();await put({id:m.id,fp,blob,name:m.name,savedAt:Date.now()});saved=await get(m.id);localStorage.setItem('vd_diag_download_count_'+m.id,String(Number(localStorage.getItem('vd_diag_download_count_'+m.id)||0)+1));log('DOWNLOAD DE REDE concluído: '+Math.round(blob.size/1024)+' KB')}else log('Arquivo já estava no IndexedDB; nenhum download de mídia feito.');
+ const count=Number(localStorage.getItem('vd_diag_download_count_'+m.id)||0);row('Downloads desta mídia neste navegador',String(count),count<=1);row('Arquivo salvo no IndexedDB',saved&&saved.blob?Math.round(saved.blob.size/1024)+' KB':'não',!!(saved&&saved.blob));
+ const local=URL.createObjectURL(saved.blob);row('Fonte do vídeo','LOCAL blob: (sem URL Supabase)',true);video.src=local;video.loop=true;video.onplaying=()=>{state.textContent='TESTE LOCAL RODANDO';state.className='ok';playInfo.textContent='Reprodução local em loop. Deixe 10–15 minutos. Se continuar tocando, o Blob/IndexedDB funciona para esta mídia.'};video.onerror=()=>{state.textContent='FALHA NA REPRODUÇÃO LOCAL';state.className='bad';playInfo.textContent='O navegador não conseguiu reproduzir o Blob local.'};await video.play();
+ }catch(e){state.textContent='DIAGNÓSTICO PAROU';state.className='bad';row('Erro',e.message,false);log(e.stack||e.message)}
+}
+boot();
+})();
