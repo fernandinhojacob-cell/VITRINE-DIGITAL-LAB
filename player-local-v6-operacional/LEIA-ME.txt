@@ -1,0 +1,20 @@
+VITRINE DIGITAL PLAYER LOCAL 6.1 OPERACIONAL
+
+Mantém o núcleo aprovado na The Frame: IndexedDB + Blob local.
+
+Inclui:
+- playlist do Supabase;
+- download apenas de mídia nova/alterada;
+- troca somente após concluir os downloads;
+- reprodução local e continuidade após reabrir;
+- programação por dia/horário;
+- checagem de atualização a cada 6 minutos;
+- heartbeat para Online/Offline;
+- remoção local de mídia que saiu da playlist após atualização concluída;
+- funcionamento com conteúdo local se a internet cair.
+
+INSTALAÇÃO DE TESTE SEGURA:
+Envie a pasta player-local-v6-operacional para a raiz do repositório. Não substitui player-local-v6.
+URL: /player-local-v6-operacional/?code=TV-0001
+
+A programação atualmente cadastrada no Supabase continua sendo a fonte de verdade.
