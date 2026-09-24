@@ -1,0 +1,20 @@
+VITRINE DIGITAL — PLAYER LOCAL 6.3 ATOMIC LOW EGRESS
+
+Base: Player 6.2 operacional preservado.
+
+NOVO:
+- mantém download local via IndexedDB;
+- só baixa mídia nova/alterada;
+- troca a playlist somente depois que os arquivos necessários estiverem locais;
+- remove localmente mídia retirada da playlist;
+- heartbeat leve de sincronização a cada ~6 minutos em screen_heartbeat;
+- Proof of Play registra somente IDs/horários/duração (não envia vídeo);
+- monitoramento e miniaturas continuam sem carregar vídeo automaticamente.
+
+IMPORTANTE:
+- o Player 6.2 original continua intacto em player-local-v6-operacional;
+- esta versão usa as tabelas já existentes screen_heartbeat e proof_of_play;
+- se a política de INSERT de proof_of_play não existir, a reprodução continua normalmente; apenas o relatório não será gravado.
+
+Teste:
+/player-local-v6-3-operacional/?code=TV-0001
