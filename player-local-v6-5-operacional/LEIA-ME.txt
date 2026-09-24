@@ -1,0 +1,13 @@
+VITRINE DIGITAL PLAYER LOCAL 6.5
+
+Base: 6.4 operacional, preservada sem alterações.
+
+Mudanças desta versão:
+- checagem automática da playlist a cada 2 minutos;
+- proteção reforçada contra redownload: se a mídia já estiver no IndexedDB e a URL do arquivo continuar a mesma, o Blob local é reutilizado mesmo que metadados tenham sido atualizados;
+- download continua seletivo: somente arquivos novos ou com URL realmente alterada;
+- troca de playlist permanece atômica: a lista ativa só é substituída após preparar todos os arquivos necessários;
+- heartbeat permanece em 60 segundos;
+- reprodução local e funcionamento offline preservados.
+
+Teste recomendado: manter o player aberto, adicionar 1 mídia nova à playlist e aguardar até 2 minutos. Confirmar que somente a nova mídia é baixada.
