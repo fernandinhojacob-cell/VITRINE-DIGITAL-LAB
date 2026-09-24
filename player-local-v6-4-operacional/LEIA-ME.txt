@@ -1,0 +1,8 @@
+VITRINE DIGITAL PLAYER LOCAL 6.4 — SYNC STATUS / LOW EGRESS
+
+- Baseado na 6.3 estável.
+- Mantém IndexedDB e download seletivo.
+- Não baixa novamente arquivos já armazenados.
+- Heartbeat leve informa: versão, estado da sincronização, quantidade de arquivos locais e playlist.
+- Nenhum vídeo é enviado no monitoramento.
+- Publicar esta pasta separadamente como player-local-v6-4-operacional.
